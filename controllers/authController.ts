@@ -1,20 +1,42 @@
 import { Request, Response } from "express";
-import { users } from "../db/schema/user";
+import { properties, residents } from "../db/schema/user";
 import { db } from "../db/db";
 import { eq } from "drizzle-orm";
 import _ from "lodash";
 import { createToken } from "../utils";
 
-type NewUser = typeof users.$inferInsert
+type NewUser = typeof residents.$inferInsert
 
 export const signup = async (req: Request, res: Response) => {
     const body: NewUser = req.body
+
+    // const property = await db.select().from(properties).where(eq(properties.id, body.propertyId))
+    const property = await db.query.properties.findFirst({
+        where: eq(properties.id, body.propertyId)
+    })
+    if (!property) {
+        return res.status(400).json({
+            success: false,
+            message: "Property ID is invalid"
+        })
+    }
+
+    const alreadyExists = await db.query.residents.findFirst({
+        where: ((residents, { eq, or }) => or(eq(residents.username, body.username), eq(residents.email, body.email)))
+    })
+
+    if (alreadyExists) {
+        return res.status(400).json({
+            success: false,
+            message: "Email or username already exists."
+        })
+    }
 
     if (body) {
         const hashP = await Bun.password.hash(body.password);
         if (hashP) {
             try {
-                const signedup = await db.insert(users).values({
+                const signedup = await db.insert(residents).values({
                     ...body,
                     password: hashP
                 });
@@ -27,7 +49,9 @@ export const signup = async (req: Request, res: Response) => {
 
             } catch (err) {
                 console.log(err)
-
+                return res.json({
+                    err
+                })
             }
         }
     }
@@ -39,7 +63,7 @@ export const login = async (req: Request, res: Response) => {
     if (email && password) {
         try {
 
-            const user = await db.select().from(users).where(eq(users.email, email))
+            const user = await db.select().from(residents).where(eq(residents.email, email))
             const foundUser = _.first(user)
             if (foundUser) {
                 // const hashP = await Bun.password.hash(password)
@@ -82,11 +106,10 @@ export const login = async (req: Request, res: Response) => {
 
 export const deleteuser = async (req: Request, res: Response) => {
     const { username } = req.body
-
     if (username) {
         try {
 
-            const deleted = await db.delete(users).where(eq(users.username, username))
+            const deleted = await db.delete(residents).where(eq(residents.username, username))
             if (deleted) {
                 return res.json({
                     success: true,
