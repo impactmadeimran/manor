@@ -81,6 +81,10 @@ export const residencyLogin = async (req: Request, res: Response) => {
 
 export const verifyResidencyCode = async (req: Request, res: Response) => {
     const { email, code } = req.body;
+    if (!email || !code) return res.status(400).json({
+        success: false,
+        message: "Email and verification code is required"
+    })
     try {
         const exists = await db.query.residencies.findFirst({
             where: eq(residencies.email, email)
