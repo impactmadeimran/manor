@@ -4,15 +4,22 @@ import { db } from "../db/db";
 import { eq } from "drizzle-orm";
 import _ from "lodash";
 import { createToken } from "../utils";
+import { createInsertSchema } from "drizzle-zod";
+import { ZodError } from "zod";
 
 type NewUser = typeof residents.$inferInsert
+
+const insertUerSchema = createInsertSchema(residents, {
+    username: (schema) => schema.username.min(3, { message: "Username must be more than 3 characters" }),
+    email: (schema) => schema.email.email({ message: "Enter a valid email" }),
+    password: (schema) => schema.password.min(6, { message: "Password should be more than 6 characters" })
+})
 
 export const signup = async (req: Request, res: Response) => {
     const body: NewUser = req.body
 
-    // const property = await db.select().from(properties).where(eq(properties.id, body.propertyId))
     const property = await db.query.properties.findFirst({
-        where: eq(properties.id, body.propertyId)
+        where: eq(properties.id, body.propertyId as any)
     })
     if (!property) {
         return res.status(400).json({
@@ -20,41 +27,55 @@ export const signup = async (req: Request, res: Response) => {
             message: "Property ID is invalid"
         })
     }
+    try {
+        const check = insertUerSchema.parse(body)
+        if (check) {
+            const alreadyExists = await db.query.residents.findFirst({
+                where: ((residents, { eq, or }) => or(eq(residents.username, body.username), eq(residents.email, body.email)))
+            })
 
-    const alreadyExists = await db.query.residents.findFirst({
-        where: ((residents, { eq, or }) => or(eq(residents.username, body.username), eq(residents.email, body.email)))
-    })
-
-    if (alreadyExists) {
-        return res.status(400).json({
-            success: false,
-            message: "Email or username already exists."
-        })
-    }
-
-    if (body) {
-        const hashP = await Bun.password.hash(body.password);
-        if (hashP) {
-            try {
-                const signedup = await db.insert(residents).values({
-                    ...body,
-                    password: hashP
-                });
-                if (signedup) {
-                    return res.json({
-                        success: true,
-                        message: "User created successfully"
-                    })
-                }
-
-            } catch (err) {
-                console.log(err)
-                return res.json({
-                    err
+            if (alreadyExists) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Email or username already exists."
                 })
             }
+
+            if (body) {
+                const hashP = await Bun.password.hash(body.password);
+                if (hashP) {
+                    try {
+                        const signedup = await db.insert(residents).values({
+                            ...body,
+                            password: hashP
+                        });
+                        if (signedup) {
+                            return res.json({
+                                success: true,
+                                message: "User created successfully"
+                            })
+                        }
+
+                    } catch (err) {
+                        console.log(err)
+                        return res.json({
+                            err
+                        })
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        if (err instanceof ZodError) {
+            return res.json({
+                success: false,
+                message: err.issues[0].message
+            })
         }
     }
+
+
+
 }
 
 export const login = async (req: Request, res: Response) => {
@@ -63,13 +84,13 @@ export const login = async (req: Request, res: Response) => {
     if (email && password) {
         try {
 
-            const user = await db.select().from(residents).where(eq(residents.email, email))
-            const foundUser = _.first(user)
+            // const user = await db.select().from(residents).where(eq(residents.email, email))
+            // const foundUser = _.first(user)
+            const foundUser = await db.query.residents.findFirst({
+                where: eq(residents.email, email)
+            })
             if (foundUser) {
-                // const hashP = await Bun.password.hash(password)
                 const verifyHash = await Bun.password.verify(password, foundUser?.password)
-                console.log(verifyHash)
-
                 if (verifyHash) {
                     const refreshedUser = _.omit(foundUser, ['password', 'createdAt'])
                     const token = await createToken(refreshedUser)

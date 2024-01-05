@@ -43,6 +43,20 @@
       "when": 1701791218381,
       "tag": "0005_stale_retro_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1704404914788,
+      "tag": "0006_chubby_ben_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1704457590436,
+      "tag": "0007_motionless_power_man",
+      "breakpoints": true
     }
   ]
 }
